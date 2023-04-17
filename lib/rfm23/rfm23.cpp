@@ -2,35 +2,39 @@
 
 namespace Artemis
 {
-    namespace Teensy
+    namespace Devices
     {
-        namespace Radio
+        namespace Radios
         {
             RFM23::RFM23(uint8_t slaveSelectPin, uint8_t interruptPin, RHGenericSPI &spi) : rfm23(slaveSelectPin, interruptPin, spi) {}
 
-            bool RFM23::init()
+            int32_t RFM23::init(rfm23_config cfg, Threads::Mutex *mtx)
             {
-                Threads::Scope lock(spi1_mtx);
-                SPI1.setMISO(RFM23_SPI_MISO);
-                SPI1.setMOSI(RFM23_SPI_MOSI);
-                SPI1.setSCK(RFM23_SPI_SCK);
-                pinMode(RFM23_RX_ON, OUTPUT);
-                pinMode(RFM23_TX_ON, OUTPUT);
+                Serial.println("Radio initializing...");
+                config = cfg;
+                spi_mtx = mtx;
 
-                unsigned long timeoutStart = millis();
+                Threads::Scope lock(*spi_mtx);
+                SPI1.setMISO(config.pins.spi_miso);
+                SPI1.setMOSI(config.pins.spi_mosi);
+                SPI1.setSCK(config.pins.spi_sck);
+                pinMode(config.pins.rx_on, OUTPUT);
+                pinMode(config.pins.tx_on, OUTPUT);
+
+                elapsedMillis timeout;
                 while (!rfm23.init())
                 {
-                    if (millis() - timeoutStart > 10000)
+                    if (timeout > 10000)
                     {
 
-                        Serial.println("[RFM23] INIT FAILED");
-                        return false;
+                        Serial.println("Radio failed to initialize");
+                        return -1;
                     }
                 }
-                rfm23.setFrequency(RFM23_FREQ);   // frequency default is 434MHz
-                rfm23.setTxPower(RFM23_TX_POWER); // 20 is the max
+                rfm23.setFrequency(config.freq);
+                rfm23.setTxPower(config.tx_power);
 
-                /* RFM23 modulation schemes and data rates
+                /* RFM23 modulation     schemes and data rates
                  * <FSK_Rb125Fd125>     highest FSK data rate (125kbs)
                  * <FSK_Rb2Fd5>         lowe FSK data rate (2kbs)
                  * <GFSK_Rb125Fd125>    highest GFSK rate GFSK (125kbs)
@@ -39,62 +43,78 @@ namespace Artemis
                  */
 
                 rfm23.sleep();
-                timeoutStart = millis();
-                while (!rfm23.setModemConfig(RH_RF22::GFSK_Rb125Fd125))
+                timeout = 0;
+                while (!rfm23.setModemConfig(RH_RF22::FSK_Rb2Fd5))
                 {
-                    if (millis() - timeoutStart > 10000)
+                    if (timeout > 10000)
                     {
-                        Serial.println("[RFM23] SET FSK MODULATION FAILED");
-                        return false;
+                        Serial.println("Radio failed to set FSK modulation");
+                        return -1;
                     }
                 }
                 rfm23.sleep();
 
-                Serial.println("[RFM23] INIT SUCCESS");
+                Serial.println("Radio initialized");
                 rfm23.setModeIdle();
-                return true;
+                return 0;
             }
 
-            void RFM23::reset()
+            int32_t RFM23::reset()
             {
-                Threads::Scope lock(spi1_mtx);
+                Threads::Scope lock(*spi_mtx);
                 rfm23.reset();
+                return 0;
             }
 
-            void RFM23::send(PacketComm &packet)
+            int32_t RFM23::send(PacketComm &packet)
             {
-                digitalWrite(RFM23_RX_ON, LOW);
-                digitalWrite(RFM23_TX_ON, LOW);
+                int32_t iretn = 0;
+
+                digitalWrite(config.pins.rx_on, HIGH);
+                digitalWrite(config.pins.tx_on, LOW);
 
                 packet.wrapped.resize(0);
-                packet.Wrap();
-
-                Threads::Scope lock(spi1_mtx);
+                iretn = packet.Wrap();
+                if (iretn < 0)
+                {
+                    Serial.println("Wrap fail");
+                    return -1;
+                }
+                if (packet.wrapped.size() > RH_RF22_MAX_MESSAGE_LEN)
+                {
+                    Serial.println("[RFM23] oversize");
+                    return COSMOS_GENERAL_ERROR_OVERSIZE;
+                }
+                Threads::Scope lock(*spi_mtx);
                 rfm23.send(packet.wrapped.data(), packet.wrapped.size());
-                rfm23.waitPacketSent();
+                iretn = rfm23.waitPacketSent(1000);
+
+                if (iretn == false)
+                {
+                    return -1;
+                }
 
                 rfm23.sleep();
                 rfm23.setModeIdle();
-                Serial.print("[RFM23] SENDING: [");
+                Serial.print("Radio Sending: [");
                 for (size_t i = 0; i < packet.wrapped.size(); i++)
                 {
                     Serial.print(packet.wrapped[i], HEX);
                 }
                 Serial.println("]");
+
+                return 0;
             }
 
-            bool RFM23::recv(PacketComm &packet)
+            int32_t RFM23::recv(PacketComm &packet, uint16_t timeout)
             {
                 int32_t iretn = 0;
 
-                digitalWrite(RFM23_RX_ON, LOW);
-                digitalWrite(RFM23_TX_ON, HIGH);
+                digitalWrite(config.pins.rx_on, LOW);
+                digitalWrite(config.pins.tx_on, HIGH);
 
-                Threads::Scope lock(spi1_mtx);
-                int wait_time = 5000 - rfm23_queue.size() * 1000;
-                if (wait_time < 100)
-                    wait_time = 100;
-                if (rfm23.waitAvailableTimeout(wait_time))
+                Threads::Scope lock(*spi_mtx);
+                if (rfm23.waitAvailableTimeout(timeout))
                 {
                     packet.wrapped.resize(0);
                     packet.wrapped.resize(RH_RF22_MAX_MESSAGE_LEN);
@@ -106,13 +126,32 @@ namespace Artemis
                         rfm23.setModeIdle();
 
                         if (iretn < 0)
-                            return false;
+                        {
+                            Serial.println("Data received, but not in packetcomm format");
+                            return -1;
+                        }
 
-                        return true;
+                        return packet.wrapped.size();
                     }
                 }
                 rfm23.setModeIdle();
-                return false;
+                return -1;
+            }
+
+            int32_t RFM23::set_tx_power(uint8_t power)
+            {
+                if (power > 20)
+                    power = 20;
+                else if (power < 1)
+                    power = 1;
+
+                config.tx_power = power;
+                return 0;
+            }
+
+            int32_t RFM23::get_tsen()
+            {
+                return rfm23.temperatureRead();
             }
         }
     }

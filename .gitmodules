@@ -1,0 +1,4 @@
+
+[submodule "lib/micro-cosmos"]
+	path = lib/micro-cosmos
+	url = https://github.com/hsfl/micro-cosmos.git

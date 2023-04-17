@@ -1,4 +1,4 @@
-#include <artemis_defs.h>
+#include "config/artemis_defs.h"
 
 const char *current_sen_names[ARTEMIS_CURRENT_SENSOR_COUNT] = {"solar_panel_1", "solar_panel_2", "solar_panel_3", "solar_panel_4", "battery_board"};
 const char *temp_sen_names[ARTEMIS_TEMP_SENSOR_COUNT] = {"obc", "pdu", "battery board", "solar pannel 1", "solar panel 2", "solar panel 3", "solar panel 4"};
@@ -9,11 +9,6 @@ std::map<string, NODES> NodeType = {
     {"ground", NODES::GROUND_NODE_ID},
     {"artemis_teensy", NODES::TEENSY_NODE_ID},
     {"artemis_rpi", NODES::RPI_NODE_ID},
-};
-
-std::map<string, ARTEMIS_RADIOS> RadioType = {
-    {"none", ARTEMIS_RADIOS::NONE},
-    {"rfm23", ARTEMIS_RADIOS::RFM23},
 };
 
 std::map<string, PDU_CMD> PDUType = {
@@ -44,11 +39,11 @@ queue<PacketComm> rfm23_queue;
 Threads::Mutex spi1_mtx;
 
 // Utility Functions
-int kill_thread(char *thread_name)
+int kill_thread(uint8_t channel_id)
 {
     for (auto it = thread_list.begin(); it != thread_list.end(); it++)
     {
-        if (it->thread_name == thread_name)
+        if (it->channel_id == channel_id)
         {
             int ret = it->thread_id;
             threads.kill(it->thread_id);

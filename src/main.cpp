@@ -3,7 +3,7 @@
 #include <vector>
 #include <map>
 #include <string.h>
-#include <artemis_channels.h>
+#include "channels/artemis_channels.h"
 #include <support/configCosmosKernel.h>
 #include <artemisbeacons.h>
 
@@ -11,15 +11,17 @@ void handle_cmd();
 
 namespace
 {
+  using namespace Artemis::Teensy;
+
   char buf[256];
   PacketComm packet;
 
-  // Ethernet
-  byte mac[] = {0x00, 0xAA, 0xBB, 0xCC, 0xDE, 0x02};
-  IPAddress remoteIp(192, 168, 150, 197); // Edit this to the IP of your computer runing COSMOS Web
-  unsigned short remotePort = 65535;
-  unsigned short localPort = 65535;
-  EthernetUDP udp;
+  // // Ethernet
+  // byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED};
+  // IPAddress remoteIp(192, 168, 150, 174); // Edit this to the IP of your computer runing COSMOS Web
+  // unsigned short remotePort = 10095;
+  // unsigned short localPort = 10095;
+  // EthernetUDP udp;
 }
 
 void setup()
@@ -28,17 +30,17 @@ void setup()
   while (!Serial)
     continue;
 
-  Serial.println("Initializing Ethernet...");
-  if (Ethernet.begin(mac) == 0)
-  {
-    Serial.println("Ethernet not connected");
-  }
-  udp.begin(localPort);
+  // Serial.println("Initializing Ethernet...");
+  // if (Ethernet.begin(mac) == 0)
+  // {
+  //   Serial.println("Ethernet not connected");
+  // }
+  // udp.begin(localPort);
 
   threads.setSliceMillis(10);
 
   // Threads
-  thread_list.push_back({threads.addThread(Artemis::Teensy::Channels::rfm23_channel), "rfm23 thread"});
+  thread_list.push_back({threads.addThread(Channels::rfm23_channel, 9000), Channels::Channel_ID::RFM23_CHANNEL});
 }
 
 void loop()
@@ -47,80 +49,103 @@ void loop()
 
   if (PullQueue(packet, main_queue, main_queue_mtx))
   {
-    StaticJsonDocument<1100> doc;
-    doc["node_name"] = "artemis_teensy";
+    //   // StaticJsonDocument<1100> doc;
+    //   // doc["node_name"] = "artemis_teensy";
 
-    switch (packet.header.type)
-    {
-    case PacketComm::TypeId::DataBeacon:
-    {
-      switch ((TypeId)packet.data[0])
-      {
-      case TypeId::current1:
-      {
-        Serial.println("Recieved Current Beacon 1");
-        currentbeacon1 beacon1;
-        memcpy(&beacon1, packet.data.data(), sizeof(beacon1));
-        doc["time"] = beacon1.deci;
-        for (int i = 0; i < ARTEMIS_CURRENT_BEACON_1_COUNT; i++)
-        {
-          JsonObject current1 = doc.createNestedObject(current_sen_names[i]);
-          current1["vol"] = beacon1.busvoltage[i];
-          current1["cur"] = beacon1.current[i];
-        }
-        break;
-      }
-      case TypeId::current2:
-      {
-        Serial.println("Recieved Current Beacon 2");
-        currentbeacon2 beacon2;
-        memcpy(&beacon2, packet.data.data(), sizeof(beacon2));
-        doc["time"] = beacon2.deci;
-        Serial.println(beacon2.deci);
-        break;
-      }
-      case TypeId::temperature:
-      {
-        Serial.println("Recieved Temperature Beacon");
-        temperaturebeacon beacon;
-        memcpy(&beacon, packet.data.data(), sizeof(beacon));
-        doc["time"] = beacon.deci;
-        Serial.println(beacon.deci);
-        break;
-      }
-      case TypeId::imu:
-      {
-        Serial.println("Recieved IMU Beacon 1");
-        imubeacon beacon;
-        memcpy(&beacon, packet.data.data(), sizeof(beacon));
-        doc["time"] = beacon.deci;
-        Serial.println(beacon.deci);
-        break;
-      }
-      case TypeId::mag:
-      {
-        Serial.println("Recieved IMU Beacon 2");
-        magbeacon beacon;
-        memcpy(&beacon, packet.data.data(), sizeof(beacon));
-        doc["time"] = beacon.deci;
-        Serial.println(beacon.deci);
-        break;
-      }
-      default:
-      {
-        Serial.println("invalid type");
-      }
-      }
-      // Send UDP packet
-      udp.beginPacket(remoteIp, remotePort);
-      serializeJson(doc, udp);
-      udp.println();
-      udp.endPacket();
-      break;
-    }
-    default:
-      Serial.println("invalid packet type");
-    }
+    //   switch (packet.header.type)
+    //   {
+    //   case PacketComm::TypeId::DataObcBeacon:
+    //   {
+    //     switch ((TypeId)packet.data[0])
+    //     {
+    //     case TypeId::current1:
+    //     {
+    //       Serial.println("Recieved Current Beacon 1");
+    //       currentbeacon1 beacon1;
+    //       memcpy(&beacon1, packet.data.data(), sizeof(beacon1));
+    //       // doc["time"] = beacon1.deci;
+    //       for (int i = 0; i < ARTEMIS_CURRENT_BEACON_1_COUNT; i++)
+    //       {
+    //         // JsonObject current1 = doc.createNestedObject(current_sen_names[i]);
+    //         // current1["vol"] = beacon1.busvoltage[i];
+    //         // current1["cur"] = beacon1.current[i];
+    //       }
+    //       break;
+    //     }
+    //     case TypeId::current2:
+    //     {
+    //       Serial.println("Recieved Current Beacon 2");
+    //       currentbeacon2 beacon2;
+    //       memcpy(&beacon2, packet.data.data(), sizeof(beacon2));
+    //       for (int i = 2; i < ARTEMIS_CURRENT_SENSOR_COUNT; i++)
+    //       {
+    //         // JsonObject current2 = doc.createNestedObject(current_sen_names[i]);
+    //         // current2["vol"] = beacon2.busvoltage[i];
+    //         // current2["cur"] = beacon2.current[i];
+    //       }
+    //       break;
+    //     }
+    //     case TypeId::temperature:
+    //     {
+    //       Serial.println("Recieved Temperature Beacon");
+    //       temperaturebeacon beacon;
+    //       memcpy(&beacon, packet.data.data(), sizeof(beacon));
+    //       // doc["time"] = beacon.deci;
+    //       for (int i = 0; i < ARTEMIS_TEMP_SENSOR_COUNT; i++)
+    //       {
+    //         // JsonObject temperature = doc.createNestedObject(temp_sen_names[i]);
+    //         // temperature["celsius"] = beacon.temperatureC[i];
+    //       }
+    //       break;
+    //     }
+    //     case TypeId::imu:
+    //     {
+    //       Serial.println("Recieved IMU Beacon 1");
+    //       imubeacon beacon;
+    //       memcpy(&beacon, packet.data.data(), sizeof(beacon));
+    //       // doc["time"] = beacon.deci;
+
+    //       // JsonObject imu_temp = doc.createNestedObject("temp");
+    //       // imu_temp["temp"] = beacon.imutemp;
+
+    //       // // JsonObject imu = doc.createNestedObject("imu");
+    //       // imu["accelx"] = beacon.accelx;
+    //       // imu["accely"] = (beacon.accely);
+    //       // imu["accelz"] = (beacon.accelz);
+
+    //       // imu["gyrox"] = (beacon.gyrox);
+    //       // imu["gyrox"] = (beacon.gyroy);
+    //       // imu["gyrox"] = (beacon.gyroz);
+
+    //       break;
+    //     }
+    //     case TypeId::mag:
+    //     {
+    //       Serial.println("Recieved IMU Beacon 2");
+    //       magbeacon beacon;
+    //       memcpy(&beacon, packet.data.data(), sizeof(beacon));
+    //       // doc["time"] = beacon.deci;
+
+    //       // JsonObject mag = doc.createNestedObject("mag");
+    //       mag["magx"] = (beacon.magx);
+    //       mag["magy"] = (beacon.magy);
+    //       mag["magz"] = (beacon.magz);
+
+    //       break;
+    //     }
+    //     default:
+    //       break;
+    //     }
+    //     // // Send UDP packet
+    //     // udp.beginPacket(remoteIp, remotePort);
+    //     // serializeJson(doc, udp);
+    //     // udp.println();
+    //     // udp.endPacket();
+    //     break;
+    //   }
+    //   default:
+    //     break;
+    //   }
   }
 }
 
@@ -138,9 +163,9 @@ void handle_cmd()
       args.push_back(string(token));
     }
 
-    if (args.size() < 3)
+    if (args.size() < 2)
     {
-      Serial.println("COMMAND SYNTAX: <node_dest> <radio_out>:<radio_in> <command> [data]");
+      Serial.println("COMMAND SYNTAX: <node_dest> <command> [data]");
       return;
     }
 
@@ -149,12 +174,12 @@ void handle_cmd()
     packet.wrapped.resize(0);
 
     // Set origin
-    packet.header.orig = NODES::GROUND_NODE_ID;
+    packet.header.nodeorig = NODES::GROUND_NODE_ID;
 
     // Get destination
     if (NodeType.find(args[0]) != NodeType.end())
     {
-      packet.header.dest = NodeType.find(args[0])->second;
+      packet.header.nodedest = NodeType.find(args[0])->second;
     }
     else
     {
@@ -162,34 +187,13 @@ void handle_cmd()
       return;
     }
 
-    // Parse radio_out and radio_in
-    if (args[1].find(':') == string::npos)
-    {
-      Serial.println("Invalid radio argument format: <radio_out>:<radio_in>");
-      return;
-    }
-    const char *radios = args[1].c_str();
-    char *radio_arg = strtok((char *)radios, ":");
-    String radio_out(radio_arg);
-    radio_arg = strtok(NULL, "");
-    String radio_in(radio_arg);
-    radio_in = radio_in.toLowerCase();
-    if (RadioType.find(radio_in.c_str()) != RadioType.end())
-    {
-      packet.header.radio = RadioType.find(radio_in.c_str())->second;
-    }
-    else
-    {
-      sprintf(buf, "Invalid radio_in: %s", radio_in.c_str());
-      Serial.println(buf);
-      memset(buf, 0, sizeof(buf));
-      return;
-    }
+    packet.header.chanin = Artemis::Teensy::Channels::Channel_ID::RFM23_CHANNEL;
+    packet.header.chanout = Artemis::Teensy::Channels::Channel_ID::RFM23_CHANNEL;
 
     // Parse command
-    if (packet.StringType.find(args[2]) != packet.StringType.end())
+    if (packet.StringType.find(args[1]) != packet.StringType.end())
     {
-      packet.header.type = packet.StringType.find(args[2])->second;
+      packet.header.type = packet.StringType.find(args[1])->second;
     }
     else
     {
@@ -201,12 +205,12 @@ void handle_cmd()
     {
     case PacketComm::TypeId::CommandEpsSwitchName:
     {
-      if (args.size() < 5)
+      if (args.size() < 4)
       {
-        Serial.println("Inncorrect command, usage: EpsSwitchName <switch name> 1|0");
+        Serial.println("Incorrect command, usage: EpsSwitchName <switch name> 1|0");
         return;
       }
-      String switch_name(args[3].c_str());
+      String switch_name(args[2].c_str());
       switch_name = switch_name.toLowerCase();
       if (PDUType.find(switch_name.c_str()) != PDUType.end())
       {
@@ -217,11 +221,11 @@ void handle_cmd()
         Serial.println("Incorrect command, usage: EpsSwitchName <switch name> 1|0");
         return;
       }
-      if (args[4] == "1")
+      if (args[3] == "1")
       {
         packet.data.push_back((uint8_t)1);
       }
-      else if (args[4] == "0")
+      else if (args[3] == "0")
       {
         packet.data.push_back((uint8_t)0);
       }
@@ -232,7 +236,6 @@ void handle_cmd()
       }
       break;
     }
-
     default:
       break;
     }
@@ -250,20 +253,7 @@ void handle_cmd()
     //   }
     // }
 
-    // Send to ground station radio
-    radio_out = radio_out.toLowerCase();
-    if (RadioType.find(radio_out.c_str()) != RadioType.end())
-    {
-      PushQueue(packet, rfm23_queue, rfm23_queue_mtx);
-    }
-    else
-    {
-      sprintf(buf, "Invalid radio_out: %s", radio_out.c_str());
-      Serial.println(buf);
-      memset(buf, 0, sizeof(buf));
-      return;
-    }
-
+    PushQueue(packet, rfm23_queue, rfm23_queue_mtx);
     Serial.println("Command sent to radio. Waiting to send...");
   }
 }

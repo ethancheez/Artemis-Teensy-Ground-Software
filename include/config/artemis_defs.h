@@ -12,11 +12,9 @@
 #define ARTEMIS_CURRENT_BEACON_1_COUNT 2
 #define ARTEMIS_CURRENT_SENSOR_COUNT 5
 #define ARTEMIS_TEMP_SENSOR_COUNT 7
-#define AREF_VOLTAGE 3.3
 
 extern const char *current_sen_names[ARTEMIS_CURRENT_SENSOR_COUNT];
 extern const char *temp_sen_names[ARTEMIS_TEMP_SENSOR_COUNT];
-
 
 // Nodes
 enum NODES : uint8_t
@@ -32,7 +30,7 @@ extern std::map<string, NODES> NodeType;
 struct thread_struct
 {
   int thread_id;
-  const char *thread_name;
+  uint8_t channel_id;
 };
 
 // Enums
@@ -46,7 +44,7 @@ enum TEENSY_PINS
   T_GPIO5,
   T_GPIO6,
   RADIO_RESET,
-  NIRQ,
+  UART6_RX,
   T_CS1,
   T_CS,
   SPI0_MOSI,
@@ -78,17 +76,9 @@ enum TEENSY_PINS
   SDN,
   SPI1_CS1,
   SPI1_D0,
-  A16_UNUSED,
+  NIRQ,
   AIN2
 };
-
-enum ARTEMIS_RADIOS : uint8_t
-{
-  NONE,
-  RFM23,
-};
-
-extern std::map<string, ARTEMIS_RADIOS> RadioType;
 
 enum PDU_CMD : uint8_t
 {
