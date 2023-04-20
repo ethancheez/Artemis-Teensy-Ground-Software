@@ -1,5 +1,7 @@
 #include <Arduino.h>
 #include <NativeEthernet.h>
+#include <NativeEthernetUdp.h>
+#include <ArduinoJson.h>
 #include <vector>
 #include <map>
 #include <string.h>
@@ -12,16 +14,14 @@ void handle_cmd();
 namespace
 {
   using namespace Artemis::Teensy;
-
-  char buf[256];
   PacketComm packet;
 
-  // // Ethernet
-  // byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED};
-  // IPAddress remoteIp(192, 168, 150, 174); // Edit this to the IP of your computer runing COSMOS Web
-  // unsigned short remotePort = 10095;
-  // unsigned short localPort = 10095;
-  // EthernetUDP udp;
+  uint8_t mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED};
+
+  const IPAddress remoteIP(192, 168, 157, 228);
+  const unsigned int remotePort = 10095;
+
+  EthernetUDP udp;
 }
 
 void setup()
@@ -30,17 +30,141 @@ void setup()
   while (!Serial)
     continue;
 
-  // Serial.println("Initializing Ethernet...");
-  // if (Ethernet.begin(mac) == 0)
-  // {
-  //   Serial.println("Ethernet not connected");
-  // }
-  // udp.begin(localPort);
+  Ethernet.begin(mac);
+  delay(1000);
+
+  unsigned int localPort = 8888;
+  udp.begin(localPort);
 
   threads.setSliceMillis(10);
 
   // Threads
   thread_list.push_back({threads.addThread(Channels::rfm23_channel, 9000), Channels::Channel_ID::RFM23_CHANNEL});
+
+  Serial.println("Ground Station Test Software Setup Complete");
+}
+
+String temperatureBeaconToJson(const temperaturebeacon &beacon)
+{
+  StaticJsonDocument<256> doc;
+  doc["type"] = static_cast<uint8_t>(beacon.type);
+  doc["deci"] = beacon.deci;
+  JsonArray tempArray = doc.createNestedArray("temperatureC");
+  for (const auto &temp : beacon.temperatureC)
+  {
+    tempArray.add(temp);
+  }
+  String json;
+  serializeJson(doc, json);
+  return json;
+}
+
+String currentBeacon1ToJson(const currentbeacon1 &beacon)
+{
+  StaticJsonDocument<1000> doc;
+  doc["type"] = static_cast<uint8_t>(beacon.type);
+  doc["deci"] = beacon.deci;
+  JsonArray voltageArray = doc.createNestedArray("busvoltage");
+  JsonArray currentArray = doc.createNestedArray("current");
+  for (const auto &voltage : beacon.busvoltage)
+  {
+    voltageArray.add(voltage);
+  }
+  for (const auto &current : beacon.current)
+  {
+    currentArray.add(current);
+  }
+  String json;
+  serializeJson(doc, json);
+  return json;
+}
+
+String currentBeacon2ToJson(const currentbeacon2 &beacon)
+{
+  StaticJsonDocument<256> doc;
+  doc["type"] = static_cast<uint8_t>(beacon.type);
+  doc["deci"] = beacon.deci;
+  JsonArray voltageArray = doc.createNestedArray("busvoltage");
+  JsonArray currentArray = doc.createNestedArray("current");
+  for (const auto &voltage : beacon.busvoltage)
+  {
+    voltageArray.add(voltage);
+  }
+  for (const auto &current : beacon.current)
+  {
+    currentArray.add(current);
+  }
+  String json;
+  serializeJson(doc, json);
+  return json;
+}
+
+String magBeaconToJson(const magbeacon &beacon)
+{
+  StaticJsonDocument<128> doc;
+  doc["type"] = static_cast<uint8_t>(beacon.type);
+  doc["deci"] = beacon.deci;
+  doc["magx"] = beacon.magx;
+  doc["magy"] = beacon.magy;
+  doc["magz"] = beacon.magz;
+  String json;
+  serializeJson(doc, json);
+  return json;
+}
+
+String imuBeaconToJson(const imubeacon &beacon)
+{
+  StaticJsonDocument<256> doc;
+  doc["type"] = static_cast<uint8_t>(beacon.type);
+  doc["deci"] = beacon.deci;
+  doc["accelx"] = beacon.accelx;
+  doc["accely"] = beacon.accely;
+  doc["accelz"] = beacon.accelz;
+  doc["gyrox"] = beacon.gyrox;
+  doc["gyroy"] = beacon.gyroy;
+  doc["gyroz"] = beacon.gyroz;
+  doc["imutemp"] = beacon.imutemp;
+  String json;
+  serializeJson(doc, json);
+  return json;
+}
+
+String gpsBeaconToJson(const gpsbeacon &beacon)
+{
+  StaticJsonDocument<256> doc;
+  doc["type"] = static_cast<uint8_t>(beacon.type);
+  doc["deci"] = beacon.deci;
+  doc["latitude"] = beacon.latitude;
+  doc["longitude"] = beacon.longitude;
+  doc["speed"] = beacon.speed;
+  doc["angle"] = beacon.angle;
+  doc["altitude"] = beacon.altitude;
+  doc["satellites"] = beacon.satellites;
+  String json;
+  serializeJson(doc, json);
+  return json;
+}
+
+String switchBeaconToJson(const switchbeacon &beacon)
+{
+  StaticJsonDocument<256> doc;
+  doc["type"] = static_cast<uint8_t>(beacon.type);
+  doc["deci"] = beacon.deci;
+  JsonArray swArray = doc.createNestedArray("sw");
+  for (const auto &sw : beacon.sw)
+  {
+    swArray.add(sw);
+  }
+  String json;
+  serializeJson(doc, json);
+  return json;
+}
+
+void sendJsonOverUdp(const String &json)
+{
+  udp.beginPacket(remoteIP, remotePort);
+  udp.write(json.c_str());
+  udp.endPacket();
 }
 
 void loop()
@@ -49,103 +173,87 @@ void loop()
 
   if (PullQueue(packet, main_queue, main_queue_mtx))
   {
-    //   // StaticJsonDocument<1100> doc;
-    //   // doc["node_name"] = "artemis_teensy";
+    switch (packet.header.type)
+    {
+    case PacketComm::TypeId::DataObcBeacon:
+    {
 
-    //   switch (packet.header.type)
-    //   {
-    //   case PacketComm::TypeId::DataObcBeacon:
-    //   {
-    //     switch ((TypeId)packet.data[0])
-    //     {
-    //     case TypeId::current1:
-    //     {
-    //       Serial.println("Recieved Current Beacon 1");
-    //       currentbeacon1 beacon1;
-    //       memcpy(&beacon1, packet.data.data(), sizeof(beacon1));
-    //       // doc["time"] = beacon1.deci;
-    //       for (int i = 0; i < ARTEMIS_CURRENT_BEACON_1_COUNT; i++)
-    //       {
-    //         // JsonObject current1 = doc.createNestedObject(current_sen_names[i]);
-    //         // current1["vol"] = beacon1.busvoltage[i];
-    //         // current1["cur"] = beacon1.current[i];
-    //       }
-    //       break;
-    //     }
-    //     case TypeId::current2:
-    //     {
-    //       Serial.println("Recieved Current Beacon 2");
-    //       currentbeacon2 beacon2;
-    //       memcpy(&beacon2, packet.data.data(), sizeof(beacon2));
-    //       for (int i = 2; i < ARTEMIS_CURRENT_SENSOR_COUNT; i++)
-    //       {
-    //         // JsonObject current2 = doc.createNestedObject(current_sen_names[i]);
-    //         // current2["vol"] = beacon2.busvoltage[i];
-    //         // current2["cur"] = beacon2.current[i];
-    //       }
-    //       break;
-    //     }
-    //     case TypeId::temperature:
-    //     {
-    //       Serial.println("Recieved Temperature Beacon");
-    //       temperaturebeacon beacon;
-    //       memcpy(&beacon, packet.data.data(), sizeof(beacon));
-    //       // doc["time"] = beacon.deci;
-    //       for (int i = 0; i < ARTEMIS_TEMP_SENSOR_COUNT; i++)
-    //       {
-    //         // JsonObject temperature = doc.createNestedObject(temp_sen_names[i]);
-    //         // temperature["celsius"] = beacon.temperatureC[i];
-    //       }
-    //       break;
-    //     }
-    //     case TypeId::imu:
-    //     {
-    //       Serial.println("Recieved IMU Beacon 1");
-    //       imubeacon beacon;
-    //       memcpy(&beacon, packet.data.data(), sizeof(beacon));
-    //       // doc["time"] = beacon.deci;
-
-    //       // JsonObject imu_temp = doc.createNestedObject("temp");
-    //       // imu_temp["temp"] = beacon.imutemp;
-
-    //       // // JsonObject imu = doc.createNestedObject("imu");
-    //       // imu["accelx"] = beacon.accelx;
-    //       // imu["accely"] = (beacon.accely);
-    //       // imu["accelz"] = (beacon.accelz);
-
-    //       // imu["gyrox"] = (beacon.gyrox);
-    //       // imu["gyrox"] = (beacon.gyroy);
-    //       // imu["gyrox"] = (beacon.gyroz);
-
-    //       break;
-    //     }
-    //     case TypeId::mag:
-    //     {
-    //       Serial.println("Recieved IMU Beacon 2");
-    //       magbeacon beacon;
-    //       memcpy(&beacon, packet.data.data(), sizeof(beacon));
-    //       // doc["time"] = beacon.deci;
-
-    //       // JsonObject mag = doc.createNestedObject("mag");
-    //       mag["magx"] = (beacon.magx);
-    //       mag["magy"] = (beacon.magy);
-    //       mag["magz"] = (beacon.magz);
-
-    //       break;
-    //     }
-    //     default:
-    //       break;
-    //     }
-    //     // // Send UDP packet
-    //     // udp.beginPacket(remoteIp, remotePort);
-    //     // serializeJson(doc, udp);
-    //     // udp.println();
-    //     // udp.endPacket();
-    //     break;
-    //   }
-    //   default:
-    //     break;
-    //   }
+      switch (static_cast<TypeId>(packet.data[0]))
+      {
+      case TypeId::current1:
+      {
+        Serial.println("Received Current Beacon 1");
+        currentbeacon1 beacon1;
+        packet.data.resize(sizeof(beacon1));
+        memcpy(&beacon1, packet.data.data(), sizeof(beacon1));
+        String json = currentBeacon1ToJson(beacon1);
+        sendJsonOverUdp(json);
+        break;
+      }
+      case TypeId::current2:
+      {
+        Serial.println("Received Current Beacon 2");
+        currentbeacon2 beacon2;
+        packet.data.resize(sizeof(beacon2));
+        memcpy(&beacon2, packet.data.data(), sizeof(beacon2));
+        String json = currentBeacon2ToJson(beacon2);
+        sendJsonOverUdp(json);
+        break;
+      }
+      case TypeId::temperature:
+      {
+        Serial.println("Received Temperature Beacon");
+        temperaturebeacon beacon;
+        memcpy(&beacon, packet.data.data(), sizeof(beacon));
+        String json = temperatureBeaconToJson(beacon);
+        sendJsonOverUdp(json);
+        break;
+      }
+      case TypeId::mag:
+      {
+        Serial.println("Received Magnetometer Beacon");
+        magbeacon beacon;
+        memcpy(&beacon, packet.data.data(), sizeof(beacon));
+        String json = magBeaconToJson(beacon);
+        sendJsonOverUdp(json);
+        break;
+      }
+      case TypeId::imu:
+      {
+        Serial.println("Received IMU Beacon");
+        imubeacon beacon;
+        memcpy(&beacon, packet.data.data(), sizeof(beacon));
+        String json = imuBeaconToJson(beacon);
+        sendJsonOverUdp(json);
+        break;
+      }
+      case TypeId::gps:
+      {
+        Serial.println("Received GPS Beacon");
+        gpsbeacon beacon;
+        memcpy(&beacon, packet.data.data(), sizeof(beacon));
+        String json = gpsBeaconToJson(beacon);
+        sendJsonOverUdp(json);
+        break;
+      }
+      case TypeId::sw:
+      {
+        Serial.println("Received Switch Status Beacon");
+        switchbeacon beacon;
+        memcpy(&beacon, packet.data.data(), sizeof(beacon));
+        String json = switchBeaconToJson(beacon);
+        sendJsonOverUdp(json);
+        break;
+      }
+      default:
+        Serial.println("Received Unknown Packet");
+        break;
+      }
+      break;
+    }
+    default:
+      break;
+    }
   }
 }
 
@@ -218,7 +326,7 @@ void handle_cmd()
       }
       else
       {
-        Serial.println("Incorrect command, usage: EpsSwitchName <switch name> 1|0");
+        Serial.println("Switch name not found");
         return;
       }
       if (args[3] == "1")
@@ -254,6 +362,6 @@ void handle_cmd()
     // }
 
     PushQueue(packet, rfm23_queue, rfm23_queue_mtx);
-    Serial.println("Command sent to radio. Waiting to send...");
+    Serial.println("Command sent to radio");
   }
 }

@@ -21,7 +21,6 @@ namespace
 
     RFM23 rfm23(config.pins.cs, config.pins.nirq, hardware_spi1);
     PacketComm packet;
-    elapsedMillis telem;
 }
 
 void Artemis::Teensy::Channels::rfm23_channel()
@@ -37,11 +36,10 @@ void Artemis::Teensy::Channels::rfm23_channel()
             {
             case PacketComm::TypeId::CommandObcPing:
             case PacketComm::TypeId::CommandCameraCapture:
-            case PacketComm::TypeId::CommandEpsSwitchNames:
+            case PacketComm::TypeId::CommandEpsSwitchName:
             case PacketComm::TypeId::CommandEpsSwitchStatus:
             case PacketComm::TypeId::CommandObcSendBeacon:
             {
-                Serial.println("sending...");
                 rfm23.send(packet);
                 threads.delay(500);
                 break;
@@ -56,7 +54,7 @@ void Artemis::Teensy::Channels::rfm23_channel()
             timeout = 100;
         if (rfm23.recv(packet, (uint16_t)timeout) >= 0)
         {
-            Serial.print("[RFM23] RECEIVED: [");
+            Serial.print("Radio Received: [");
             for (size_t i = 0; i < packet.wrapped.size(); i++)
             {
                 Serial.print(packet.wrapped[i], HEX);
@@ -64,13 +62,6 @@ void Artemis::Teensy::Channels::rfm23_channel()
             Serial.println("]");
             PushQueue(packet, main_queue, main_queue_mtx);
         }
-
-        // if (telem > 10000)
-        // {
-        //     Serial.print("[RFM23] TSEN = ");
-        //     Serial.println(rfm23.get_tsen());
-        //     telem = 0;
-        // }
 
         threads.delay(10);
     }

@@ -24,7 +24,10 @@ std::map<string, PDU_CMD> PDUType = {
     {"hbridge1", PDU_CMD::HBRIDGE1},
     {"hbridge2", PDU_CMD::HBRIDGE2},
     {"burn", PDU_CMD::BURN},
+    {"burn1", PDU_CMD::BURN1},
+    {"burn2", PDU_CMD::BURN2},
     {"rpi", PDU_CMD::RPI},
+    {"all", PDU_CMD::All},
 };
 
 // Mutex for Command Queues

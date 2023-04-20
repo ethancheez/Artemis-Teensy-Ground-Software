@@ -82,6 +82,8 @@ enum TEENSY_PINS
 
 enum PDU_CMD : uint8_t
 {
+  None,
+  All,
   SW_3V3_1,
   SW_3V3_2,
   SW_5V_1,
@@ -94,8 +96,11 @@ enum PDU_CMD : uint8_t
   HBRIDGE1,
   HBRIDGE2,
   BURN,
+  BURN1,
+  BURN2,
   RPI,
 };
+
 extern std::map<string, PDU_CMD> PDUType;
 
 // Max threads = 16
